@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "platform-automation"
+version = "0.1.0"
+description = "Automation CLI for platform guardrails and manifest validation"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1.7",
+  "pyyaml>=6.0.2",
+  "rich>=13.8.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0"
+]
+
+[project.scripts]
+platformctl = "platform_automation.cli:cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["platform_automation*"]

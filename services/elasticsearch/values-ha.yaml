@@ -1,0 +1,42 @@
+clusterName: platform-es
+
+master:
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 30Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+data:
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 200Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
+ingest:
+  enabled: true
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+antiAffinity: hard
+minimumMasterNodes: 2
+esJavaOpts: "-Xms2g -Xmx2g"

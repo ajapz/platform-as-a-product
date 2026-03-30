@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: platform-automation
+Version: 0.1.0
+Summary: Automation CLI for platform guardrails and manifest validation
+Requires-Python: >=3.11
+Requires-Dist: click>=8.1.7
+Requires-Dist: pyyaml>=6.0.2
+Requires-Dist: rich>=13.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"

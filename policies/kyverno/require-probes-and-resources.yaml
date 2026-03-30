@@ -1,0 +1,34 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes-and-resources
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-probes-and-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+      validate:
+        message: "Deployments must define readiness/liveness probes and resource requests/limits."
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - resources:
+                      requests:
+                        cpu: "?*"
+                        memory: "?*"
+                      limits:
+                        cpu: "?*"
+                        memory: "?*"
+                    readinessProbe:
+                      (httpGet):
+                        path: "?*"
+                    livenessProbe:
+                      (httpGet):
+                        path: "?*"

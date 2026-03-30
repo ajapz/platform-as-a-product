@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-prod
+  labels:
+    platform.company.io/managed: "true"
+    platform.company.io/environment: prod
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments-prod
+  labels:
+    platform.company.io/managed: "true"
+    platform.company.io/environment: prod
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: search-prod
+  labels:
+    platform.company.io/managed: "true"
+    platform.company.io/environment: prod
+    istio-injection: enabled

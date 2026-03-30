@@ -1,0 +1,37 @@
+architecture: replication
+
+primary:
+  persistence:
+    enabled: true
+    size: 100Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  podAntiAffinityPreset: hard
+  pdb:
+    create: true
+    minAvailable: 1
+
+readReplicas:
+  replicaCount: 2
+  persistence:
+    enabled: true
+    size: 100Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  podAntiAffinityPreset: hard
+
+metrics:
+  enabled: true
+
+volumePermissions:
+  enabled: true

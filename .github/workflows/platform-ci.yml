@@ -1,0 +1,155 @@
+name: platform-ci
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  terraform-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive terraform
+
+  terraform-static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: terraform-linters/setup-tflint@v4
+      - name: TFLint init
+        run: tflint --init
+      - name: TFLint
+        run: tflint --recursive terraform
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+
+  terraform-validate-plan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, stage, prod]
+    env:
+      TF_IN_AUTOMATION: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Configure kubeconfig from secret
+        if: ${{ secrets.KUBECONFIG_B64 != '' }}
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Terraform init
+        working-directory: terraform/environments/${{ matrix.environment }}
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.TF_BACKEND_CONFIG_B64 }}" ]; then
+            echo "${{ secrets.TF_BACKEND_CONFIG_B64 }}" | base64 -d > backend.hcl
+            terraform init -input=false -backend-config=backend.hcl
+          else
+            terraform init -input=false -backend=false
+          fi
+
+      - name: Terraform validate
+        working-directory: terraform/environments/${{ matrix.environment }}
+        run: terraform validate
+
+      - name: Terraform plan
+        if: ${{ secrets.KUBECONFIG_B64 != '' }}
+        working-directory: terraform/environments/${{ matrix.environment }}
+        run: terraform plan -input=false -no-color -out=tfplan -var="kubeconfig_path=$HOME/.kube/config"
+
+      - name: Terraform show plan
+        if: ${{ secrets.KUBECONFIG_B64 != '' }}
+        working-directory: terraform/environments/${{ matrix.environment }}
+        run: terraform show -no-color tfplan > plan.txt
+
+      - name: Upload plan artifact
+        if: ${{ secrets.KUBECONFIG_B64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: terraform/environments/${{ matrix.environment }}/plan.txt
+
+      - name: Terraform plan skipped info
+        if: ${{ secrets.KUBECONFIG_B64 == '' }}
+        run: echo "Skipping Terraform plan because KUBECONFIG_B64 is not configured."
+
+  python-automation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: automation/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: python -m pip install -e .[dev]
+      - name: Test
+        run: pytest -q
+      - name: Validate Kubernetes manifests
+        run: platformctl validate-manifests ../../kubernetes
+      - name: Check HA standards
+        run: platformctl check-ha ../../kubernetes/workloads
+
+  netpol-bundle-drift:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: automation/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: python -m pip install -e .[dev]
+      - name: Verify network policy bundle drift
+        shell: bash
+        run: |
+          rm -rf ../../kubernetes/network-policies/.generated-ci
+          platformctl generate-netpol-bundle \
+            --namespaces-file ../../kubernetes/namespaces/platform-namespaces.yaml \
+            --output-dir ../../kubernetes/network-policies/.generated-ci
+
+          diff -ru ../../kubernetes/network-policies/generated ../../kubernetes/network-policies/.generated-ci
+          rm -rf ../../kubernetes/network-policies/.generated-ci
+
+  kubernetes-policy-and-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        shell: bash
+        run: |
+          curl -sSL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo mv kubeconform /usr/local/bin/kubeconform
+      - name: Install conftest
+        shell: bash
+        run: |
+          curl -sSL -o conftest.tar.gz https://github.com/open-policy-agent/conftest/releases/download/v0.57.0/conftest_0.57.0_Linux_x86_64.tar.gz
+          tar -xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+      - name: Install yamllint
+        run: pipx install yamllint
+      - name: YAML lint
+        run: yamllint kubernetes policies/kyverno
+      - name: Kubernetes schema validation
+        shell: bash
+        run: |
+          find kubernetes policies/kyverno -name '*.yaml' -print0 | xargs -0 kubeconform -strict -summary -ignore-missing-schemas
+      - name: Conftest policy checks
+        run: conftest test kubernetes/workloads/*.yaml -p policies/conftest
